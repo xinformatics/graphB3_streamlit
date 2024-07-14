@@ -392,7 +392,7 @@ if st.button("Predict"):
                     "Original Molecule": original_img_html,
                     "Probability": f"{probability[0]:.4f}",
                     "Blood Brain Barrier Permeability": "Positive" if label == 1 else "Negative",
-                    "Highlighted Molecule": highlight_img_html
+                    "Highlighted Molecule as per GNN Explainer": highlight_img_html
                 })
 
         # Display results as a table
