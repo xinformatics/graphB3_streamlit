@@ -156,7 +156,9 @@ class GraphConvModel(torch.nn.Module):
         return out
 
 # Load the state_dict
-state_dict = torch.load('best_mcc_model_weights.pth')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+state_dict = torch.load('best_mcc_model_weights.pth', map_location=device)
+# state_dict = torch.load('best_mcc_model_weights.pth')
 
 # Create the model and load the state_dict
 model = GraphConvModel(embedding_size=128, num_features=33)  # Example num_features
