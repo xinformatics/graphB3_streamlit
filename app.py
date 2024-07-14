@@ -401,7 +401,7 @@ if st.button("Predict"):
 
         # Option to download results
         def get_table_download_link(df):
-            csv = df.drop(columns=['Original Molecule', 'Highlighted Molecule']).to_csv(index=False)  # Remove molecule images from the download
+            csv = df.drop(columns=['Original Molecule', 'Highlighted Molecule as per GNN Explainer']).to_csv(index=False)  # Remove molecule images from the download
             b64 = base64.b64encode(csv.encode()).decode()
             href = f'<a href="data:file/csv;base64,{b64}" download="predictions.csv">Download Predictions</a>'
             return href
