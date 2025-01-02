@@ -97,6 +97,17 @@ if smiles_input:
     smiles_df = pd.DataFrame(smiles_list, columns=["SMILES"])
 
 
+import base64
+from html import escape
+
+def is_valid_base64(b64_string):
+    try:
+        base64.b64decode(b64_string, validate=True)
+        return True
+    except Exception:
+        return False
+
+
 # Define the featurizer class
 class MolGraphConvFeaturizerWoLabels:
     def __init__(self):
@@ -179,8 +190,8 @@ class GraphConvModel(torch.nn.Module):
         return out
 
 # Load the state_dict
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-state_dict = torch.load('best_mcc_model_weights.pth', map_location=device)
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+state_dict = torch.load('best_mcc_model_weights.pth', map_location="cpu")
 
 
 # Create the model and load the state_dict
@@ -297,6 +308,7 @@ if st.button("Predict"):
                         status_text.text(f"Running GNN explainer: {int(progress_percentage * 100)}% complete")
 
             status_text.text("GNN explainer complete!")
+
             test_chem_all = Batch.from_data_list(all_explanations)
 
             chem_loader_exp = DataLoader(test_chem_all, batch_size=1, shuffle=False)
@@ -323,6 +335,8 @@ if st.button("Predict"):
                 'edge_masks': edge_masks_cpu_model
             }
 
+            # print('completed till here!')
+
             def average_bidirectional_edges(graphs_dict):
                 result = {'edge_indices': [], 'edge_masks': []}
                 
@@ -347,7 +361,7 @@ if st.button("Predict"):
             nchem_exp_dict_avg = average_bidirectional_edges(nchem_exp_dict)
 
             def get_atom_indices(index, dict):
-                print(f"Index: {index}, Length of edge_indices: {len(dict['edge_indices'])}, Length of edge_masks: {len(dict['edge_masks'])}")
+                # print(f"Index: {index}, Length of edge_indices: {len(dict['edge_indices'])}, Length of edge_masks: {len(dict['edge_masks'])}")
                 
                 test_dict = {}
                 for key, value in zip(dict['edge_indices'][index], dict['edge_masks'][index]):
@@ -368,90 +382,242 @@ if st.button("Predict"):
             index_list = smiles_df.index.tolist()
 
             atom_indices = {index: get_atom_indices(index, nchem_exp_dict_avg) for index in index_list}
-
+################################################################################################################################################################
             def generate_gradient_colors(start_color, end_color, n_colors):
+                """Generate gradient colors between two RGB colors."""
                 start_color = np.array(start_color)
                 end_color = np.array(end_color)
                 colors = [tuple((start_color + (end_color - start_color) * (i / (n_colors - 1))).tolist()) for i in range(n_colors)]
                 return colors
-            
+
+##################################################################################################################################################################
             def highlight_molecule(smiles, importance_dict, label, image_size=(300, 300), highlight=False):
-                
+                """Generate a molecule image with optional highlights."""
                 # Create molecule from SMILES
                 m = Chem.MolFromSmiles(smiles)
                 if not m:
                     raise ValueError(f"Cannot create molecule from SMILES: {smiles}")
-                
-                if not highlight:
-                    drawer = Draw.MolDraw2DCairo(image_size[0], image_size[1])
-                    drawer.DrawMolecule(m)
-                    drawer.FinishDrawing()
-                    return drawer.GetDrawingText()
-                
-                # Define colors
-                light_red = [1.0, 1.0, 1.0]  # Light red
-                dark_red = [1.0, 0.1, 0.1]   # Dark red
-                
-                # Generate gradient colors
-                label_1_colors = generate_gradient_colors(light_red, dark_red, 10)
-                
-                # Define colors
-                light_blue = [1.0, 1.0, 1.0]  # Light blue
-                dark_blue = [0.2, 0.4, 0.9]  # Dark blue
-                
-                # Generate gradient colors
-                label_0_colors = generate_gradient_colors(light_blue, dark_blue, 10)
-                
-                # Define color schemes
-                if label == 1:
-                    gradient_colors = label_1_colors
-                else:
-                    gradient_colors = label_0_colors
-                    
-                # Set sssAtoms property to None initially
-                m.__sssAtoms = None
-                
-                # Create a drawer object
-                drawer = Draw.MolDraw2DCairo(image_size[0], image_size[1])
-                
+
+                # # Define gradients for positive and negative labels
+                # if label == 1:  # Positive
+                #     light_color = [0.8, 1.0, 0.8]  # Light green
+                #     dark_color = [0.0, 0.6, 0.0]   # Dark green
+                # else:  # Negative
+                #     light_color = [1.0, 0.8, 0.8]  # Light red
+                #     dark_color = [0.6, 0.0, 0.0]   # Dark red
+
+                # Define gradients for positive and negative labels
+                if label == 1:  # Positive
+                    # low_importance = [1.0, 1.0, 0.5]  # Yellow for low importance
+                    # medium_importance = [0.5, 1.0, 0.5]  # Green for medium importance
+                    # high_importance = [0.0, 0.4, 0.0]  # Dark green for high importance
+                    low_importance = [0.9, 1.0, 0.6]  # Light yellow-green
+                    medium_importance = [0.2, 0.9, 0.3]  # Vivid green
+                    high_importance = [0.0, 0.3, 0.0]  # Dark green
+                else:  # Negative
+                    # low_importance = [1.0, 1.0, 0.5]  # Yellow for low importance
+                    # medium_importance = [1.0, 0.5, 0.5]  # Light red for medium importance
+                    # high_importance = [0.6, 0.0, 0.0]  # Dark red for high importance
+                    low_importance = [1.0, 0.9, 0.7]  # Light orange
+                    medium_importance = [1.0, 0.4, 0.3]  # Vivid red-orange
+                    high_importance = [0.5, 0.0, 0.0]  # Crimson
+
+
+                # Generate gradient: Combine low-medium and medium-high ranges
+                gradient_colors = (
+                    generate_gradient_colors(low_importance, medium_importance, 5) +
+                    generate_gradient_colors(medium_importance, high_importance, 5)
+                )
+
                 # Prepare highlight colors
                 highlight_colors = {}
-                if importance_dict:
+                if highlight and importance_dict:
                     for i, (score_range, atom_indices) in enumerate(importance_dict.items()):
-                        if atom_indices:  # only assign color if there are atoms to highlight 
-                            color = gradient_colors[i]  # Get the color for the current score range
+                        if atom_indices:
+                            color = gradient_colors[i]
+                            # print(color)
                             for atom_index in atom_indices:
                                 highlight_colors[atom_index] = color
 
-                # Set the sssAtoms property with the atom indices to be highlighted
-                if highlight_colors:
-                    m.__sssAtoms = list(highlight_colors.keys())
-    
-                    # Draw molecule with highlight
-                    opts = drawer.drawOptions()
-                    drawer.DrawMolecule(m, highlightAtoms=list(highlight_colors.keys()), highlightAtomColors=highlight_colors)
-                    drawer.FinishDrawing()
-                    img = drawer.GetDrawingText()
-                
-                else:
-                    img = Draw.MolToImage(m, size=image_size)
+                # Configure drawing options
+                drawer = Draw.MolDraw2DCairo(image_size[0], image_size[1])
+                opts = drawer.drawOptions()
 
-                buf = io.BytesIO()
+                # Ensure highlighted atoms override defaults
+                highlight_atoms = list(highlight_colors.keys())  # Atoms to be highlighted
+                highlight_atom_colors = highlight_colors  # Custom highlight colors
+
+                # print()
+
+                # Draw the molecule
+
                 if highlight:
-                    buf.write(img)
-                    buf.seek(0)
-                    img_pil = Image.open(buf)
+                    drawer.drawOptions().useBWAtomPalette()
+                    drawer.DrawMolecule(
+                        m,
+                        highlightAtoms=highlight_atoms,
+                        highlightAtomColors=highlight_atom_colors
+                    )
                 else:
-                    img_pil = img
+                    # drawer.drawOptions().useBWAtomPalette()
+                    drawer.DrawMolecule(
+                        m,
+                        highlightAtoms=None,
+                        highlightAtomColors=None
+                    )
+                drawer.FinishDrawing()
+                img_binary = drawer.GetDrawingText()
 
+
+                # Convert image to Base64
                 buf = io.BytesIO()
-                img_pil.save(buf, format="PNG")
+                buf.write(img_binary)
                 buf.seek(0)
                 img_b64 = base64.b64encode(buf.read()).decode()
-
                 return img_b64
+
+            # def highlight_molecule(smiles, importance_dict, label, image_size=(600, 600), highlight=False):
+            #     """Generate a molecule image with optional highlights."""
+            #     # Create molecule from SMILES
+            #     m = Chem.MolFromSmiles(smiles)
+            #     if not m:
+            #         raise ValueError(f"Cannot create molecule from SMILES: {smiles}")
+
+            #     # If highlight is False, return a plain molecule image
+            #     if not highlight:
+            #         drawer = Draw.MolDraw2DCairo(image_size[0], image_size[1])
+            #         drawer.DrawMolecule(m)
+            #         drawer.FinishDrawing()
+            #         img_binary = drawer.GetDrawingText()
+
+            #         # # Save binary data for inspection
+            #         # with open("test_image_raw.png", "wb") as f:
+            #         #     f.write(img_binary)
+
+            #         # Convert to Base64
+            #         buf = io.BytesIO()
+            #         buf.write(img_binary)
+            #         buf.seek(0)
+            #         img_b64 = base64.b64encode(buf.read()).decode()
+            #         return img_b64
+
+            #     # Highlight logic
+            #     # light_red = [1.0, 1.0, 1.0]
+            #     # dark_red = [1.0, 0.1, 0.1]
+
+            #     light_color = [0.9, 0.9, 1.0]
+            #     dark_color  = [0.4, 0.0, 0.8]  
+
+
+
+            #     # gradient_colors = generate_gradient_colors(light_red, dark_red, 10)
+            #     gradient_colors = generate_gradient_colors(light_color, dark_color, 10)
+
+            #     # Prepare highlight colors
+            #     highlight_colors = {}
+            #     if importance_dict:
+            #         for i, (score_range, atom_indices) in enumerate(importance_dict.items()):
+            #             if atom_indices:
+            #                 color = gradient_colors[i]
+            #                 for atom_index in atom_indices:
+            #                     highlight_colors[atom_index] = color
+
+            #     # Draw molecule with highlights
+            #     drawer = Draw.MolDraw2DCairo(image_size[0], image_size[1])
+            #     drawer.DrawMolecule(m, highlightAtoms=list(highlight_colors.keys()), highlightAtomColors=highlight_colors)
+            #     drawer.FinishDrawing()
+            #     img_binary = drawer.GetDrawingText()
+
+            #     # Save highlighted image for inspection
+            #     # with open("test_image_highlighted.png", "wb") as f:
+            #     #     f.write(img_binary)
+
+            #     # Convert to Base64
+            #     buf = io.BytesIO()
+            #     buf.write(img_binary)
+            #     buf.seek(0)
+            #     img_b64 = base64.b64encode(buf.read()).decode()
+            #     return img_b64
+##########################################################################################################################################################
+
             
-            # Iterate over the DataFrame and generate images as soon as data is available
+            # def highlight_molecule(smiles, importance_dict, label, image_size=(300, 300), highlight=False):
+                
+            #     # Create molecule from SMILES
+            #     m = Chem.MolFromSmiles(smiles)
+            #     if not m:
+            #         raise ValueError(f"Cannot create molecule from SMILES: {smiles}")
+                
+            #     if not highlight:
+            #         drawer = Draw.MolDraw2DCairo(image_size[0], image_size[1])
+            #         drawer.DrawMolecule(m)
+            #         drawer.FinishDrawing()
+            #         return drawer.GetDrawingText()
+                
+            #     # Define colors
+            #     light_red = [1.0, 1.0, 1.0]  # Light red
+            #     dark_red = [1.0, 0.1, 0.1]   # Dark red
+                
+            #     # Generate gradient colors
+            #     label_1_colors = generate_gradient_colors(light_red, dark_red, 10)
+                
+            #     # Define colors
+            #     light_blue = [1.0, 1.0, 1.0]  # Light blue
+            #     dark_blue = [0.2, 0.4, 0.9]  # Dark blue
+                
+            #     # Generate gradient colors
+            #     label_0_colors = generate_gradient_colors(light_blue, dark_blue, 10)
+                
+            #     # Define color schemes
+            #     if label == 1:
+            #         gradient_colors = label_1_colors
+            #     else:
+            #         gradient_colors = label_0_colors
+                    
+            #     # Set sssAtoms property to None initially
+            #     m.__sssAtoms = None
+                
+            #     # Create a drawer object
+            #     drawer = Draw.MolDraw2DCairo(image_size[0], image_size[1])
+                
+            #     # Prepare highlight colors
+            #     highlight_colors = {}
+            #     if importance_dict:
+            #         for i, (score_range, atom_indices) in enumerate(importance_dict.items()):
+            #             if atom_indices:  # only assign color if there are atoms to highlight 
+            #                 color = gradient_colors[i]  # Get the color for the current score range
+            #                 for atom_index in atom_indices:
+            #                     highlight_colors[atom_index] = color
+
+            #     # Set the sssAtoms property with the atom indices to be highlighted
+            #     if highlight_colors:
+            #         m.__sssAtoms = list(highlight_colors.keys())
+    
+            #         # Draw molecule with highlight
+            #         opts = drawer.drawOptions()
+            #         drawer.DrawMolecule(m, highlightAtoms=list(highlight_colors.keys()), highlightAtomColors=highlight_colors)
+            #         drawer.FinishDrawing()
+            #         img = drawer.GetDrawingText()
+                
+            #     else:
+            #         img = Draw.MolToImage(m, size=image_size)
+
+            #     buf = io.BytesIO()
+            #     if highlight:
+            #         buf.write(img)
+            #         buf.seek(0)
+            #         img_pil = Image.open(buf)
+            #     else:
+            #         img_pil = img
+
+            #     buf = io.BytesIO()
+            #     img_pil.save(buf, format="PNG")
+            #     buf.seek(0)
+            #     img_b64 = base64.b64encode(buf.read()).decode()
+
+            #     return img_b64
+
+#####################################################################################################################################################
             smiles_images = []  # Collect rows for the final DataFrame
 
             for idx in smiles_df.index:
@@ -461,18 +627,18 @@ if st.button("Predict"):
                 importance_dict = get_atom_indices(idx, nchem_exp_dict_avg)  # Ensure this returns a valid dictionary
 
                 try:
-                    original_img_b64 = highlight_molecule(smiles, importance_dict, label, image_size=(300, 300), highlight=False)
-                    highlight_img_b64 = highlight_molecule(smiles, importance_dict, label, image_size=(300, 300), highlight=True)
-        
-                    original_img_html = f'<img src="data:image/png;base64,{original_img_b64}" width="300">'
-                    highlight_img_html = f'<img src="data:image/png;base64,{highlight_img_b64}" width="300">'
+                    original_img_b64 = highlight_molecule(smiles, importance_dict, label, image_size=(400, 400), highlight=False)
+                    highlight_img_b64 = highlight_molecule(smiles, importance_dict, label, image_size=(400, 400), highlight=True)
+
+                    if not (is_valid_base64(original_img_b64) and is_valid_base64(highlight_img_b64)):
+                        raise ValueError("Invalid Base64 encoding")
 
                     smiles_images.append({
                         "SMILES": smiles,
-                        "Original Molecule": original_img_html,
+                        "Original Molecule": f'<img src="data:image/png;base64,{escape(original_img_b64)}" width="400">',
                         "Probability": f"{probability:.4f}",
                         "Status": "Positive" if label == 1 else "Negative",
-                        "Highlighted Molecule by Explainer": highlight_img_html
+                        "Highlighted Molecule by Explainer": f'<img src="data:image/png;base64,{escape(highlight_img_b64)}" width="400">'
                     })
 
                 except Exception as e:
